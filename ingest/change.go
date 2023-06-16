@@ -68,6 +68,38 @@ func GetChangesFromLedgerEntryChanges(ledgerEntryChanges xdr.LedgerEntryChanges)
 	return changes
 }
 
+// GetChangesFromLedgerEntryEvictions transforms evicted LedgerKeys to []Change.
+// The generated changes always remove the entries.
+func GetChangesFromLedgerEntryEvictions(keys []xdr.LedgerKey) []Change {
+	changes := []Change{}
+
+	for _, key := range keys {
+		state := xdr.LedgerEntry{}
+		switch key.Type {
+		case xdr.LedgerEntryTypeContractData:
+			state.Data.SetContractData(&xdr.ContractDataEntry{
+				ContractId: key.ContractData.ContractId,
+				Key:        key.ContractData.Key,
+			})
+		case xdr.LedgerEntryTypeContractCode:
+			state.Data.SetContractCode(&xdr.ContractCodeEntry{
+				Hash: key.ContractCode.Hash,
+			})
+		default:
+			// Currently only contractData and contractCode are evicted by core, so
+			// we only need to handle those two.
+			panic("Invalid LedgerEntry eviction type")
+		}
+		changes = append(changes, Change{
+			Type: key.Type,
+			Pre:  &state,
+			Post: nil,
+		})
+	}
+
+	return changes
+}
+
 // LedgerEntryChangeType returns type in terms of LedgerEntryChangeType.
 func (c *Change) LedgerEntryChangeType() xdr.LedgerEntryChangeType {
 	switch {
