@@ -152,42 +152,43 @@ func operationChanges(ops []xdr.OperationMeta, index uint32) []Change {
 	)
 }
 
-// GetDiagnosticEvents returns all contract events emitted by a given operation.
-func (t *LedgerTransaction) GetDiagnosticEvents() ([]xdr.DiagnosticEvent, error) {
+// GetOperationEvents returns all contract events emitted by a given operation.
+func (t *LedgerTransaction) GetOperationEvents(operationIndex uint32) ([]xdr.DiagnosticEvent, error) {
 	// Ignore operations meta if txInternalError https://github.com/stellar/go/issues/2111
 	if t.txInternalError() {
 		return nil, nil
 	}
 
 	switch t.UnsafeMeta.V {
-	case 1:
-		return nil, nil
-	case 2:
+	case 1, 2:
 		return nil, nil
 	case 3:
-		diagnosticEvents := t.UnsafeMeta.MustV3().DiagnosticEvents
-		if len(diagnosticEvents) > 0 {
-			// all contract events and diag events for a single operation(by it's index in the tx) were available
-			// in tx meta's DiagnosticEvents, no need to look anywhere else for events
-			return diagnosticEvents, nil
-		}
-
-		contractEvents := t.UnsafeMeta.MustV3().Events
-		if len(contractEvents) == 0 {
-			// no events were present in this tx meta
+		if operationIndex != 0 {
+			// Soroban only supports a single invokeHostfunction operation by itself
+			// in the transaction.
 			return nil, nil
+		}
+		sorobanMeta := t.UnsafeMeta.MustV3().SorobanMeta
+		if sorobanMeta == nil {
+			return nil, nil
+		}
+		if len(sorobanMeta.DiagnosticEvents) > 0 {
+			// There are diagnostic events, so we can infer that they are enabled,
+			// and will include all events for the operation.
+			return sorobanMeta.DiagnosticEvents, nil
 		}
 
 		// tx meta only provided contract events, no diagnostic events, we convert the contract
 		// event to a diagnostic event, to fit the response interface.
-		convertedDiagnosticEvents := make([]xdr.DiagnosticEvent, len(contractEvents))
-		for i, event := range contractEvents {
-			convertedDiagnosticEvents[i] = xdr.DiagnosticEvent{
+		events := sorobanMeta.Events
+		diagnosticEvents := make([]xdr.DiagnosticEvent, len(events))
+		for i, event := range events {
+			diagnosticEvents[i] = xdr.DiagnosticEvent{
 				InSuccessfulContractCall: true,
 				Event:                    event,
 			}
 		}
-		return convertedDiagnosticEvents, nil
+		return diagnosticEvents, nil
 	default:
 		return nil, fmt.Errorf("unsupported TransactionMeta version: %v", t.UnsafeMeta.V)
 	}
