@@ -1,6 +1,8 @@
 package xdr
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // LedgerKey implements the `Keyer` interface
 func (entry *LedgerEntry) LedgerKey() LedgerKey {
